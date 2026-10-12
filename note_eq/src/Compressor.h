@@ -14,8 +14,8 @@ public:
         bool  enabled     = false;
         float thresholdDb = -18.0f;
         float ratio       = 4.0f;
-        float attackMs    = 10.0f;
-        float releaseMs   = 150.0f;
+        float attackMs    = 20.0f;
+        float releaseMs   = 100.0f;
         bool  autoGain    = true;
         float kneeDb      = 6.0f;
     };

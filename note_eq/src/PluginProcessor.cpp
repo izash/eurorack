@@ -3,6 +3,25 @@
 
 using APVTS = juce::AudioProcessorValueTreeState;
 
+// MIDI note <-> "E1" style names for the tracking-range knobs (C4 = 60, A4 = 69)
+static juce::String noteToName (int midi)
+{
+    static const char* names[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+    return juce::String (names[((midi % 12) + 12) % 12]) + juce::String (midi / 12 - 1);
+}
+static int nameToNote (const juce::String& text, int fallback)
+{
+    auto t = text.trim().toUpperCase();
+    if (t.isEmpty()) return fallback;
+    if (t.containsOnly ("0123456789-")) return t.getIntValue();          // plain MIDI number still works
+    static const int base[] = { 9, 11, 0, 2, 4, 5, 7 };                // A B C D E F G
+    const int letter = t[0] - 'A';
+    if (letter < 0 || letter > 6) return fallback;
+    int semis = base[letter], i = 1;
+    if (t[i] == '#') { ++semis; ++i; } else if (t[i] == 'B') { --semis; ++i; }
+    return (t.substring (i).getIntValue() + 1) * 12 + semis;
+}
+
 APVTS::ParameterLayout NoteEQProcessor::createLayout()
 {
     using namespace juce;
@@ -29,17 +48,21 @@ APVTS::ParameterLayout NoteEQProcessor::createLayout()
                                                         NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.5f));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("refa"), "Tuning A",
                                                         NormalisableRange<float> (415.0f, 466.0f, 0.1f), 440.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
-    p.push_back (std::make_unique<AudioParameterInt>   (id ("lownote"),  "Lowest Note",  16, 60, 28));  // E1
-    p.push_back (std::make_unique<AudioParameterInt>   (id ("highnote"), "Highest Note", 40, 96, 79));  // G5
+    p.push_back (std::make_unique<AudioParameterInt>   (id ("lownote"),  "Lowest Note",  16, 60, 28,   // E1
+                                                        AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return noteToName (v); })
+                                                                                     .withValueFromStringFunction ([] (const String& t) { return nameToNote (t, 28); })));
+    p.push_back (std::make_unique<AudioParameterInt>   (id ("highnote"), "Highest Note", 40, 96, 79,   // G5
+                                                        AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return noteToName (v); })
+                                                                                     .withValueFromStringFunction ([] (const String& t) { return nameToNote (t, 79); })));
     p.push_back (std::make_unique<AudioParameterBool>  (id ("comp_on"), "Compressor", false));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("comp_thr"), "Comp Threshold",
                                                         NormalisableRange<float> (-48.0f, 0.0f, 0.1f), -18.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("comp_ratio"), "Comp Ratio",
                                                         NormalisableRange<float> (1.5f, 20.0f, 0.1f, 0.5f), 4.0f));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("comp_att"), "Comp Attack",
-                                                        NormalisableRange<float> (0.1f, 100.0f, 0.1f, 0.4f), 10.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+                                                        NormalisableRange<float> (0.1f, 100.0f, 0.1f, 0.4f), 20.0f, AudioParameterFloatAttributes().withLabel ("ms")));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("comp_rel"), "Comp Release",
-                                                        NormalisableRange<float> (10.0f, 1000.0f, 1.0f, 0.5f), 150.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+                                                        NormalisableRange<float> (10.0f, 1000.0f, 1.0f, 0.5f), 100.0f, AudioParameterFloatAttributes().withLabel ("ms")));
     p.push_back (std::make_unique<AudioParameterBool>  (id ("comp_auto"), "Comp Auto Gain", true));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("out"), "Output",
                                                         NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));

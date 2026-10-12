@@ -49,10 +49,6 @@ NoteEQEditor::NoteEQEditor (NoteEQProcessor& p) : AudioProcessorEditor (&p), pro
     addG (lowNote, lowL, "Lowest note", "lownote");
     addG (highNote, highL, "Highest note", "highnote");
     addG (outGain, outL, "Output", "out", " dB");
-    for (auto* s : { &lowNote, &highNote })
-    {
-        s->textFromValueFunction = [] (double v) { return noteName ((float) v); };
-    }
     addG (compThr, compThrL, "Threshold", "comp_thr", " dB");
     addG (compRatio, compRatioL, "Ratio", "comp_ratio", ":1");
     addG (compAtt, compAttL, "Attack", "comp_att", " ms");
