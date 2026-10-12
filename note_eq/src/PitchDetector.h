@@ -96,21 +96,23 @@ private:
             run += diff[(size_t) tau];
             cmnd[(size_t) tau] = run > 0.0 ? (float) (diff[(size_t) tau] * tau / run) : 1.0f;
         }
-        // first dip under the threshold, then walk to the local minimum
+        // Pick the period: find the deepest dip, then take the *shortest* lag whose dip is nearly as deep.
+        // (Taking the first dip under a fixed threshold lands an octave too high on basses with a strong 2nd harmonic.)
+        float gmin = 1.0f;
+        for (int tau = tauMin; tau < tauMax; ++tau) gmin = std::min (gmin, cmnd[(size_t) tau]);
         int found = -1;
-        for (int tau = tauMin; tau < tauMax; ++tau)
+        if (gmin < threshold)
         {
-            if (cmnd[(size_t) tau] < threshold)
+            const float limit = gmin + 0.03f;
+            for (int tau = tauMin; tau < tauMax; ++tau)
             {
-                while (tau + 1 < tauMax && cmnd[(size_t) tau + 1] < cmnd[(size_t) tau]) ++tau;
-                found = tau; break;
+                const float c = cmnd[(size_t) tau];
+                if (c <= limit && c <= cmnd[(size_t) tau - 1] && c < cmnd[(size_t) tau + 1]) { found = tau; break; }
             }
         }
         if (found < 0)
-        {   // no confident dip: report the global minimum's clarity so callers can gate on it
-            float best = 1.0f;
-            for (int tau = tauMin; tau < tauMax; ++tau) best = std::min (best, cmnd[(size_t) tau]);
-            last.frequency = 0.0f; last.clarity = 1.0f - best; return;
+        {   // no confident dip: report the clarity so callers can gate on it
+            last.frequency = 0.0f; last.clarity = 1.0f - gmin; return;
         }
         // parabolic interpolation for sub-sample accuracy
         float t = (float) found;

@@ -71,7 +71,7 @@ public:
         detector.reset();
         for (auto& b : bell) b.reset();
         curNote = targetNote = -1.0f; holdSamples = 0; sinceVoiced = 1 << 30; counter = 0;
-        level = 0.0f; dipping = false;
+        level = 0.0f; dipping = false; candNote = -1000; candCount = 0; peakLevel = 0.0f;
         bandLevel.fill (0.0f);
     }
     void setParams (const Params& np)
@@ -89,15 +89,27 @@ public:
         if (detector.push (x))
         {
             const auto& r = detector.getResult();
-            if (r.frequency > 0.0f && r.clarity > 0.5f)
+            // recent-peak tracker (falls ~30 dB/s): estimates taken in the dips between notes are junk
+            peakLevel = std::max (r.level, peakLevel * 0.983f);
+            const bool loudEnough = r.level > peakLevel * 0.316f;           // within 10 dB of the recent peak
+            if (loudEnough && r.frequency > 0.0f && r.clarity > 0.5f)
             {
                 float note = hzToMidi (r.frequency, p.refA);
                 if (note >= p.minNote - 0.5f && note <= p.maxNote + 0.5f)
                 {
+                    const int cand = (int) std::lround (note);
                     if (p.snapToNote) note = std::round (note);
-                    targetNote = note;
-                    if (curNote < 0.0f) curNote = note;
-                    sinceVoiced = 0;
+                    // a different note must be heard twice in a row before the EQ follows it:
+                    // single wrong estimates (pluck noise, octave slips) are ignored
+                    const bool sameNote = targetNote >= 0.0f && cand == (int) std::lround (targetNote);
+                    candCount = (cand == candNote) ? candCount + 1 : 1;
+                    candNote = cand;
+                    if (sameNote || candCount >= kConfirm || curNote < 0.0f)
+                    {
+                        targetNote = note;
+                        if (curNote < 0.0f) curNote = note;
+                    }
+                    if (sameNote || candCount >= kConfirm) sinceVoiced = 0;
                 }
             }
         }
@@ -164,6 +176,9 @@ private:
     Params p;
     PitchDetector detector;
     std::array<Bell, kNumBands> bell;
+    static constexpr int kConfirm = 2;
+    float peakLevel = 0.0f;
+    int candNote = -1000, candCount = 0;
     std::array<bool, kNumBands> active {};
     std::array<float, kNumBands> bandLevel {};
     float level = 0.0f;
