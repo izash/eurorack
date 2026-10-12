@@ -42,6 +42,7 @@ NoteEQEditor::NoteEQEditor (NoteEQProcessor& p) : AudioProcessorEditor (&p), pro
         setupKnob (*this, s, l, t, p.apvts, id, sAtt.back());
         s.setTextValueSuffix (suffix);
     };
+    addG (look, lookL, "Lookahead", "look", " ms");
     addG (glide, glideL, "Glide", "glide", " ms");
     addG (hold, holdL, "Hold", "hold", " ms");
     addG (sens, sensL, "Sensitivity", "sens");
@@ -111,8 +112,8 @@ void NoteEQEditor::resized()
     r.removeFromTop (6);
     auto g = r.removeFromTop (88);
     snap.setBounds (g.removeFromLeft (110).withHeight (24).translated (0, 8));
-    const int gw = g.getWidth() / 7;
-    for (auto pr : { std::pair<juce::Slider*, juce::Label*> { &glide, &glideL }, { &hold, &holdL }, { &sens, &sensL },
+    const int gw = g.getWidth() / 8;
+    for (auto pr : { std::pair<juce::Slider*, juce::Label*> { &look, &lookL }, { &glide, &glideL }, { &hold, &holdL }, { &sens, &sensL },
                      { &refA, &refAL }, { &lowNote, &lowL }, { &highNote, &highL }, { &outGain, &outL } })
     {
         auto a = g.removeFromLeft (gw);

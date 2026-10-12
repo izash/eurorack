@@ -1,38 +1,58 @@
-// Offline renderer for debugging with real recordings.
-//   render_raw in.f32 out.f32 [comp=0|1] [holdMs] -> prints tracked-note events + click stats
+// Offline renderer for debugging with real recordings (mono float32 raw in/out).
+//   render_raw in.f32 out.f32 sampleRate [preset.txt] [track.txt]
+// preset.txt = "key value" lines using the plugin's parameter ids (gain1, harm1, q1, glide, hold, ...).
+// Prints how often the tracked note changes and how short the stray ones are; track.txt gets the tracked MIDI note every 10 ms.
 #include "NoteEQ.h"
 #include "Compressor.h"
 #include <cstdio>
-#include <vector>
+#include <cstdlib>
+#include <cstring>
+#include <map>
 #include <string>
+#include <vector>
 using namespace noteeq;
+
 int main (int argc, char** argv)
 {
-    if (argc < 3) return 1;
-    const bool useComp = argc > 3 && atoi (argv[3]);
-    const float hold = argc > 4 ? (float) atof (argv[4]) : 150.0f;
-    const double SR = 48000;
-    std::vector<float> in; { FILE* f = fopen (argv[1], "rb"); float x; while (fread (&x, 4, 1, f) == 1) in.push_back (x); fclose (f); }
-    Params p; const float g[5] = { 8, -4, 6, 4, 3 };
-    for (int i = 0; i < kNumBands; ++i) { p.bands[(size_t) i].harmonic = (float) (i + 1); p.bands[(size_t) i].gainDb = g[i]; p.bands[(size_t) i].q = 4; }
-    p.holdMs = hold;
+    if (argc < 4) { std::printf ("usage: render_raw in.f32 out.f32 sampleRate [preset.txt] [track.txt]\n"); return 1; }
+    const double SR = atof (argv[3]);
+    std::map<std::string, float> v;
+    if (argc > 4) { FILE* f = fopen (argv[4], "r"); char k[64]; float x; while (f && fscanf (f, "%63s %f", k, &x) == 2) v[k] = x; if (f) fclose (f); }
+    auto get = [&] (const char* k, float d) { auto it = v.find (k); return it == v.end() ? d : it->second; };
+
+    Params p;
+    for (int i = 0; i < kNumBands; ++i)
+    {
+        const std::string n = std::to_string (i + 1); auto& b = p.bands[(size_t) i];
+        b.enabled = get (("on" + n).c_str(), 1) > 0.5f; b.harmonic = get (("harm" + n).c_str(), (float) (i + 1));
+        b.gainDb = get (("gain" + n).c_str(), 0); b.q = get (("q" + n).c_str(), 4);
+    }
+    p.glideMs = get ("glide", 20); p.holdMs = get ("hold", 150); p.sensitivity = get ("sens", 0.5f);
+    p.lookaheadMs = get ("look", 0); p.snapToNote = get ("snap", 1) > 0.5f; p.minNote = get ("lownote", 28); p.maxNote = get ("highnote", 79); p.refA = get ("refa", 440);
+    Compressor::Params cp; cp.enabled = get ("comp_on", 0) > 0.5f; cp.thresholdDb = get ("comp_thr", -18); cp.ratio = get ("comp_ratio", 4);
+    cp.attackMs = get ("comp_att", 20); cp.releaseMs = get ("comp_rel", 100); cp.autoGain = get ("comp_auto", 1) > 0.5f;
+    const float outGain = std::pow (10.0f, get ("out", 0) / 20.0f);
+
+    std::vector<float> in; { FILE* f = fopen (argv[1], "rb"); float x; while (f && fread (&x, 4, 1, f) == 1) in.push_back (x); if (f) fclose (f); }
+    std::vector<int> oracle; if (getenv ("ORACLE")) { FILE* f = fopen (getenv ("ORACLE"), "r"); int m; while (f && fscanf (f, "%d", &m) == 1) oracle.push_back (m); if (f) fclose (f); }
     NoteEQ eq; eq.setParams (p); eq.prepare (SR);
-    Compressor c; Compressor::Params cp; cp.enabled = useComp; c.prepare (SR); c.setParams (cp);
-    std::vector<float> out (in.size()); std::vector<int> track (in.size() / 480 + 1, -1); int lastNote = -99; int events = 0; size_t segStart = 0; int blips = 0;
+    Compressor c; c.prepare (SR); c.setParams (cp);
+    std::vector<float> out (in.size());
+    const int blk = (int) (SR * 0.01);
+    std::vector<int> track (in.size() / (size_t) blk + 1, -1);
+    int lastNote = -99, events = 0, blips = 0; size_t segStart = 0;
     for (size_t n = 0; n < in.size(); ++n)
     {
+        if (!oracle.empty()) { const size_t k = std::min (n / (size_t) blk + (size_t) std::lround (get ("look", 0) * 0.001 * SR / blk) , oracle.size() - 1); eq.forceNote ((float) oracle[k]); }
         float y = eq.process (in[n]);
-        y *= c.gain (std::abs (y));
+        y *= c.gain (std::abs (y)) * outGain;
         out[n] = y;
-        if (n % 480 == 0) track[n / 480] = eq.isTracking() ? (int) std::lround (eq.currentNote()) : -1;
-        int note = eq.isTracking() ? (int) std::lround (eq.currentNote()) : -1;
-        if (note != lastNote) { if (lastNote >= 0 && (double) (n - segStart) / SR < 0.060) ++blips; segStart = n; if (events < 400) std::printf ("%7.3fs  %s\n", (double) n / SR, note < 0 ? "--" : std::to_string (note).c_str()); lastNote = note; ++events; }
+        const int note = eq.isTracking() ? (int) std::lround (eq.currentNote()) : -1;
+        if (n % (size_t) blk == 0) track[n / (size_t) blk] = note;
+        if (note != lastNote) { if (lastNote >= 0 && (double) (n - segStart) / SR < 0.060) ++blips; segStart = n; lastNote = note; ++events; }
     }
-    // artifact metrics on the EQ's added signal d = out - in
-    double peak = 0; for (float x : in) peak = std::max (peak, (double) std::abs (x));
-    int clicks = 0; double worst = 0; float prev = 0;
-    for (size_t n = 0; n < in.size(); ++n) { float d = out[n] - in[n]; double j = std::abs (d - prev) / peak; prev = d; worst = std::max (worst, j); if (j > 0.03) ++clicks; }
-    std::printf ("note changes: %d | blips <60ms: %d | samples with a jump >3%% of peak: %d | worst jump: %.3f\n", events, blips, clicks, worst);
-    if (argc > 5) { FILE* t = fopen (argv[5], "w"); for (int v : track) fprintf (t, "%d\n", v); fclose (t); }
+    std::printf ("latency %d samples\n", eq.latencySamples());
+    std::printf ("note changes: %d | stray notes under 60 ms: %d\n", events, blips);
+    if (argc > 5) { FILE* t = fopen (argv[5], "w"); for (int x : track) fprintf (t, "%d\n", x); fclose (t); }
     FILE* f = fopen (argv[2], "wb"); fwrite (out.data(), 4, out.size(), f); fclose (f);
 }

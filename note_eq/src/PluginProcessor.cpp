@@ -42,6 +42,8 @@ APVTS::ParameterLayout NoteEQProcessor::createLayout()
     p.push_back (std::make_unique<AudioParameterBool>  (id ("snap"), "Snap To Note", true));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("glide"), "Glide",
                                                         NormalisableRange<float> (1.0f, 500.0f, 1.0f, 0.5f), 20.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+    p.push_back (std::make_unique<AudioParameterFloat> (id ("look"), "Lookahead",
+                                                        NormalisableRange<float> (0.0f, 100.0f, 1.0f), 40.0f, AudioParameterFloatAttributes().withLabel ("ms")));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("hold"), "Hold",
                                                         NormalisableRange<float> (0.0f, 2000.0f, 1.0f, 0.5f), 150.0f, AudioParameterFloatAttributes().withLabel ("ms")));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("sens"), "Sensitivity",
@@ -97,6 +99,7 @@ noteeq::Params NoteEQProcessor::readParams() const
     }
     p.snapToNote = get ("snap") > 0.5f;
     p.glideMs = get ("glide");
+    p.lookaheadMs = get ("look");
     p.holdMs = get ("hold");
     p.sensitivity = get ("sens");
     p.refA = get ("refa");
@@ -125,6 +128,7 @@ void NoteEQProcessor::prepareToPlay (double sr, int)
     comp.setParams (readCompParams());
     const auto p = readParams();
     for (auto& e : engines) { e.setParams (p); e.prepare (sr); }
+    setLatencySamples (engines[0].latencySamples());
 }
 
 void NoteEQProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -132,6 +136,8 @@ void NoteEQProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     juce::ScopedNoDenormals noDenormals;
     const auto p = readParams();
     const int nCh = juce::jmin (buffer.getNumChannels(), (int) engines.size());
+    if (const int lat = (int) std::lround (p.lookaheadMs * 0.001 * sampleRate); lat != getLatencySamples())
+        setLatencySamples (lat);                                    // tell the host so it can compensate
     for (int ch = 0; ch < nCh; ++ch)
     {
         auto& e = engines[(size_t) ch];

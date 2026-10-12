@@ -32,8 +32,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compOnA, compAutoA;
     juce::Rectangle<float> meterArea;
     float grDb = 0.0f;
-    juce::Slider glide, hold, sens, refA, lowNote, highNote, outGain;
-    juce::Label glideL, holdL, sensL, refAL, lowL, highL, outL;
+    juce::Slider look, glide, hold, sens, refA, lowNote, highNote, outGain;
+    juce::Label lookL, glideL, holdL, sensL, refAL, lowL, highL, outL;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> snapA;
 

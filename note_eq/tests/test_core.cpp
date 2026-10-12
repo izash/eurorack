@@ -72,6 +72,12 @@ int main()
     double err = 0; for (size_t n = 0; n < in.size(); ++n) err = std::max (err, (double) std::abs (eq2.process (in[n]) - in[n]));
     check (err < 1e-6, "all gains at 0 dB is bit-transparent");
 
+    // lookahead: flat EQ must be an exact delay of the reported latency
+    { Params la; la.lookaheadMs = 40.0f; NoteEQ e; e.setParams (la); e.prepare (SR);
+      const int D = e.latencySamples(); bool exact = D == 1920; double worst = 0;
+      for (size_t n = 0; n < in.size(); ++n) { float y = e.process (in[n]); if (n >= (size_t) D) worst = std::max (worst, (double) std::abs (y - in[n - (size_t) D])); }
+      check (exact && worst < 1e-6, "lookahead 40 ms = exact 1920-sample delay when EQ is flat"); }
+
     // silence / noise must not crash or produce NaN
     NoteEQ eq3; eq3.setParams (p); eq3.prepare (SR);
     bool finite = true; unsigned seed = 1;
