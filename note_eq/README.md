@@ -12,7 +12,7 @@ Play a D and every band slides to that D's fundamental and harmonics.
 - `src/NoteEQ.h` - tracker -> optional snap to nearest semitone -> glide -> 5 TPT-SVF bell filters
   (stable under modulation, zero latency). Pitch is held for `Hold` ms after the note stops so the
   tail of a note keeps its EQ. Bands above 0.45 x Fs are bypassed.
-- `src/Plugin*.{h,cpp}` - JUCE wrapper (VST3 / Standalone, add AU on macOS).
+- `src/Plugin*.{h,cpp}` - JUCE wrapper (AU on macOS, VST3, Standalone).
 
 ## Controls
 Per band: On, Harmonic (0.5x - 16x), Gain (+-18 dB), Q.
@@ -23,6 +23,17 @@ Global: Snap to note, Glide, Hold, Sensitivity, Tuning A, Lowest/Highest note (t
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target NoteEQ_VST3 NoteEQ_Standalone
 ```
+On macOS the same commands also build the **Audio Unit** (universal arm64 + Intel) and copy it to
+`~/Library/Audio/Plug-Ins/Components/Note EQ.component` (VST3 goes to `~/Library/Audio/Plug-Ins/VST3`).
+For Logic:
+```
+cmake --build build --target NoteEQ_AU
+auval -v aufx NtEq Izsh        # validate; Logic only loads AUs that pass
+```
+Then in Logic: Settings > Plug-in Manager > Reset & Rescan Selection (if it doesn't show up), and find it under
+Audio Units > izash > Note EQ. Needs Xcode command line tools and CMake (`brew install cmake`).
+If Logic still refuses it after auval passes, ad-hoc sign it: `codesign --force --deep -s - "~/Library/Audio/Plug-Ins/Components/Note EQ.component"`.
+
 JUCE 8.0.4 is fetched automatically. On Linux you need the usual JUCE dev packages
 (libasound2-dev libfreetype-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libgl1-mesa-dev).
 
