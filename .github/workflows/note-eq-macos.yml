@@ -1,0 +1,44 @@
+name: Note EQ (macOS build)
+
+on:
+  push:
+    paths: ['note_eq/**', '.github/workflows/note-eq-macos.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        working-directory: note_eq
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build AU, VST3, Standalone
+        working-directory: note_eq
+        run: cmake --build build --target NoteEQ_AU NoteEQ_VST3 NoteEQ_Standalone -j4
+
+      - name: Ad-hoc sign
+        working-directory: note_eq
+        run: |
+          find build/NoteEQ_artefacts/Release -maxdepth 2 \( -name '*.component' -o -name '*.vst3' -o -name '*.app' \) \
+            -exec codesign --force --deep -s - {} \;
+
+      - name: Validate Audio Unit (auval)
+        continue-on-error: true      # still publish the build if the CI sandbox can't run auval
+        run: |
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -v aufx NtEq Izsh
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent "note_eq/build/NoteEQ_artefacts/Release/AU/Note EQ.component" dist/NoteEQ-AU.zip
+          ditto -c -k --keepParent "note_eq/build/NoteEQ_artefacts/Release/VST3/Note EQ.vst3" dist/NoteEQ-VST3.zip
+          ditto -c -k --keepParent "note_eq/build/NoteEQ_artefacts/Release/Standalone/Note EQ.app" dist/NoteEQ-Standalone.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NoteEQ-macOS
+          path: dist/*.zip
