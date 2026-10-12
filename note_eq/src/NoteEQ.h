@@ -51,7 +51,7 @@ struct Params
     float refA        = 440.0f;
     bool  snapToNote  = true;    // quantise detected pitch to the nearest semitone
     float glideMs     = 20.0f;   // how fast filters slide to a new note
-    float holdMs      = 400.0f;  // keep last note this long after pitch is lost
+    float holdMs      = 150.0f;  // keep last note this long after pitch is lost
     float sensitivity = 0.5f;    // 0 = strict, 1 = accept noisy pitch
     float minNote     = 28.0f;   // MIDI note range tracked (E1 = 28 for a 4-string bass)
     float maxNote     = 79.0f;
@@ -72,6 +72,8 @@ public:
         detector.reset();
         for (auto& b : bell) b.reset();
         curNote = targetNote = -1.0f; holdSamples = 0; sinceVoiced = 1 << 30; counter = 0;
+        level = 0.0f; dipping = false;
+        bandLevel.fill (0.0f);
     }
     void setParams (const Params& np)
     {
@@ -104,15 +106,27 @@ public:
         if (sinceVoiced < (1 << 30)) ++sinceVoiced;
         const bool held = sinceVoiced <= (int) (p.holdMs * 0.001 * sr);
 
-        // --- glide current note toward the target (in semitones => exponential in Hz)
+        // --- small moves (slides, bends, vibrato) glide; a jump of more than a semitone
+        //     fades the EQ out, moves it while it is silent, then fades it back in
         if (curNote >= 0.0f && targetNote >= 0.0f)
         {
-            const float coef = 1.0f - std::exp (-1.0f / std::max (1.0f, (float) (p.glideMs * 0.001 * sr)));
-            curNote += coef * (targetNote - curNote);
+            if (!dipping && std::abs (targetNote - curNote) > 1.0f) dipping = true;
+            if (dipping)
+            {
+                level -= 1.0f / std::max (1.0f, (float) (0.002 * sr));          // ~2 ms down
+                if (level <= 0.0f) { level = 0.0f; curNote = targetNote; dipping = false; }
+            }
+            else
+            {
+                const float coef = 1.0f - std::exp (-1.0f / std::max (1.0f, (float) (p.glideMs * 0.001 * sr)));
+                curNote += coef * (targetNote - curNote);
+                level = std::min (1.0f, level + 1.0f / std::max (1.0f, (float) (0.008 * sr)));  // ~8 ms up
+            }
         }
+        else level = 0.0f;
 
-        // --- refresh filter coefficients every 16 samples
-        if ((counter++ & 15) == 0)
+        // --- refresh filter coefficients every 1 samples
+        if ((counter++ & 0) == 0)
             updateCoefficients (held);
 
         float y = x;
@@ -132,13 +146,20 @@ private:
     void updateCoefficients (bool held)
     {
         const float f0 = currentFrequency();
+        const float step = 1.0f / (float) sr;
         for (int i = 0; i < kNumBands; ++i)
         {
             const auto& b = p.bands[(size_t) i];
             const float f = f0 * b.harmonic;
-            const bool ok = b.enabled && held && f0 > 0.0f && f < (float) sr * 0.45f && std::abs (b.gainDb) > 0.01f;
-            active[(size_t) i] = ok;
-            if (ok) bell[(size_t) i].setParams (f, b.q, b.gainDb, sr);
+            const bool ok = b.enabled && held && f0 > 0.0f && f < (float) sr * 0.45f;
+            // fade the band in/out instead of switching it (that switch was the crackle):
+            // quick in (~5 ms), slower out (~25 ms)
+            auto& lv = bandLevel[(size_t) i];
+            lv = ok ? std::min (1.0f, lv + step / 0.005f) : std::max (0.0f, lv - step / 0.025f);
+            const float g = b.gainDb * lv * level;
+            // filters keep running at 0 dB while faded out so their state is always ready
+            active[(size_t) i] = f0 > 0.0f && f < (float) sr * 0.45f && (b.enabled || lv > 0.0f);
+            if (active[(size_t) i]) bell[(size_t) i].setParams (f, b.q, g, sr);
         }
     }
 
@@ -146,6 +167,9 @@ private:
     PitchDetector detector;
     std::array<Bell, kNumBands> bell;
     std::array<bool, kNumBands> active {};
+    std::array<float, kNumBands> bandLevel {};
+    float level = 0.0f;
+    bool dipping = false;
     double sr = 0.0;
     float curNote = -1.0f, targetNote = -1.0f, outGain = 1.0f;
     int holdSamples = 0, sinceVoiced = 1 << 30;

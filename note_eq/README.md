@@ -18,6 +18,17 @@ Play a D and every band slides to that D's fundamental and harmonics.
 Per band: On, Harmonic (0.5x - 16x), Gain (+-18 dB), Q.
 Global: Snap to note, Glide, Hold, Sensitivity, Tuning A, Lowest/Highest note (tracking range), Output.
 
+## What Glide, Hold and Sensitivity do
+- **Sensitivity** - how strict the pitch detector is. Low = only accept clean, clearly periodic notes
+  (fewer wrong guesses, slower to react to plucky attacks). High = accept shakier pitch (faster, but can
+  grab the wrong note on noisy attacks or dead notes). Start in the middle.
+- **Hold** - how long the EQ stays on the last note after the detector loses the pitch (note decay,
+  muted notes, noisy attack). Short = EQ lets go quickly between notes; long = smoother, but the old
+  note's EQ lingers into the gap. Bands fade in/out smoothly, so short values no longer crackle.
+- **Glide** - how fast the bands slide for *small* pitch moves (slides, bends, vibrato). A jump of more
+  than a semitone (a new note) doesn't glide: the EQ fades out for ~4 ms, moves, and fades back in
+  over ~8 ms, so it never sweeps a boosted band across your signal.
+
 ## Build
 ```
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

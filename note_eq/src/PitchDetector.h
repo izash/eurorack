@@ -27,7 +27,7 @@ public:
         maxFreq = maxHz;
         tauMin = std::max (2, (int) std::floor (dsr / maxHz));
         tauMax = (int) std::ceil (dsr / minHz) + 1;
-        window = std::max (256, 2 * tauMax);  // at least two periods of the lowest note
+        window = std::max (128, tauMax);      // one period of the lowest note: the shortest window YIN allows
         ring.assign ((size_t) (window + tauMax + 8), 0.0f);
         diff.assign ((size_t) tauMax + 2, 0.0f);
         cmnd.assign ((size_t) tauMax + 2, 0.0f);

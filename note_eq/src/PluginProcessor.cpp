@@ -24,7 +24,7 @@ APVTS::ParameterLayout NoteEQProcessor::createLayout()
     p.push_back (std::make_unique<AudioParameterFloat> (id ("glide"), "Glide",
                                                         NormalisableRange<float> (1.0f, 500.0f, 1.0f, 0.5f), 20.0f, AudioParameterFloatAttributes().withLabel ("ms")));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("hold"), "Hold",
-                                                        NormalisableRange<float> (0.0f, 2000.0f, 1.0f, 0.5f), 400.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+                                                        NormalisableRange<float> (0.0f, 2000.0f, 1.0f, 0.5f), 150.0f, AudioParameterFloatAttributes().withLabel ("ms")));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("sens"), "Sensitivity",
                                                         NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.5f));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("refa"), "Tuning A",
