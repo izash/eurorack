@@ -31,6 +31,16 @@ APVTS::ParameterLayout NoteEQProcessor::createLayout()
                                                         NormalisableRange<float> (415.0f, 466.0f, 0.1f), 440.0f, AudioParameterFloatAttributes().withLabel ("Hz")));
     p.push_back (std::make_unique<AudioParameterInt>   (id ("lownote"),  "Lowest Note",  16, 60, 28));  // E1
     p.push_back (std::make_unique<AudioParameterInt>   (id ("highnote"), "Highest Note", 40, 96, 79));  // G5
+    p.push_back (std::make_unique<AudioParameterBool>  (id ("comp_on"), "Compressor", false));
+    p.push_back (std::make_unique<AudioParameterFloat> (id ("comp_thr"), "Comp Threshold",
+                                                        NormalisableRange<float> (-48.0f, 0.0f, 0.1f), -18.0f, AudioParameterFloatAttributes().withLabel ("dB")));
+    p.push_back (std::make_unique<AudioParameterFloat> (id ("comp_ratio"), "Comp Ratio",
+                                                        NormalisableRange<float> (1.5f, 20.0f, 0.1f, 0.5f), 4.0f));
+    p.push_back (std::make_unique<AudioParameterFloat> (id ("comp_att"), "Comp Attack",
+                                                        NormalisableRange<float> (0.1f, 100.0f, 0.1f, 0.4f), 10.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+    p.push_back (std::make_unique<AudioParameterFloat> (id ("comp_rel"), "Comp Release",
+                                                        NormalisableRange<float> (10.0f, 1000.0f, 1.0f, 0.5f), 150.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+    p.push_back (std::make_unique<AudioParameterBool>  (id ("comp_auto"), "Comp Auto Gain", true));
     p.push_back (std::make_unique<AudioParameterFloat> (id ("out"), "Output",
                                                         NormalisableRange<float> (-18.0f, 18.0f, 0.1f), 0.0f, AudioParameterFloatAttributes().withLabel ("dB")));
     return { p.begin(), p.end() };
@@ -69,13 +79,27 @@ noteeq::Params NoteEQProcessor::readParams() const
     p.refA = get ("refa");
     p.minNote = get ("lownote");
     p.maxNote = juce::jmax (get ("highnote"), p.minNote + 12.0f);
-    p.outputDb = get ("out");
     return p;
+}
+
+noteeq::Compressor::Params NoteEQProcessor::readCompParams() const
+{
+    auto get = [this] (const char* s) { return apvts.getRawParameterValue (s)->load(); };
+    noteeq::Compressor::Params c;
+    c.enabled = get ("comp_on") > 0.5f;
+    c.thresholdDb = get ("comp_thr");
+    c.ratio = get ("comp_ratio");
+    c.attackMs = get ("comp_att");
+    c.releaseMs = get ("comp_rel");
+    c.autoGain = get ("comp_auto") > 0.5f;
+    return c;
 }
 
 void NoteEQProcessor::prepareToPlay (double sr, int)
 {
     sampleRate = sr;
+    comp.prepare (sr);
+    comp.setParams (readCompParams());
     const auto p = readParams();
     for (auto& e : engines) { e.setParams (p); e.prepare (sr); }
 }
@@ -93,6 +117,19 @@ void NoteEQProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         for (int i = 0; i < buffer.getNumSamples(); ++i)
             d[i] = e.process (d[i]);
     }
+    // output stage: compressor (reduction linked across channels) then output trim
+    comp.setParams (readCompParams());
+    const float outGain = std::pow (10.0f, apvts.getRawParameterValue ("out")->load() / 20.0f);
+    const int n = buffer.getNumSamples();
+    for (int i = 0; i < n; ++i)
+    {
+        float a = 0.0f;
+        for (int ch = 0; ch < nCh; ++ch) a = juce::jmax (a, std::abs (buffer.getReadPointer (ch)[i]));
+        const float g = comp.gain (a) * outGain;
+        for (int ch = 0; ch < nCh; ++ch) buffer.getWritePointer (ch)[i] *= g;
+    }
+    shownGainReduction.store (comp.gainReductionDb());
+
     shownNote.store (engines[0].isTracking() ? engines[0].currentNote() : -1.0f);
     shownHz.store (engines[0].isTracking() ? engines[0].currentFrequency() : 0.0f);
 }

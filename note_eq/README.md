@@ -29,6 +29,16 @@ Global: Snap to note, Glide, Hold, Sensitivity, Tuning A, Lowest/Highest note (t
   than a semitone (a new note) doesn't glide: the EQ fades out for ~4 ms, moves, and fades back in
   over ~8 ms, so it never sweeps a boosted band across your signal.
 
+## Compressor (output stage)
+Signal chain: EQ -> compressor -> Output trim. Off by default; tick **Compressor** to enable.
+- **Threshold** - level above which the volume is pulled down. **Ratio** - how hard (4:1 = every 4 dB over
+  becomes 1 dB). **Attack / Release** - how fast it clamps down / lets go (soft knee, no look-ahead, no latency).
+- **Auto gain** - adds make-up gain equal to the reduction a full-scale signal would get, so peaks stay near
+  0 dBFS and the compressor makes the *whole* level more even rather than just quieter. (Quiet notes below the
+  threshold get the same boost, which is the point: it evens the bass out.)
+- Stereo tracks are reduced by the same amount on both channels (linked), so the image doesn't shift.
+- The meter shows the current gain reduction.
+
 ## Build
 ```
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

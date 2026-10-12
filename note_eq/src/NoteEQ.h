@@ -55,7 +55,6 @@ struct Params
     float sensitivity = 0.5f;    // 0 = strict, 1 = accept noisy pitch
     float minNote     = 28.0f;   // MIDI note range tracked (E1 = 28 for a 4-string bass)
     float maxNote     = 79.0f;
-    float outputDb    = 0.0f;
 };
 
 class NoteEQ
@@ -82,7 +81,6 @@ public:
         if (rangeChanged && sr > 0.0)
             detector.prepare (sr, midiToHz (p.minNote, p.refA) * 0.9f, midiToHz (p.maxNote, p.refA) * 1.1f);
         detector.setThreshold (0.05f + 0.25f * p.sensitivity);
-        outGain = std::pow (10.0f, p.outputDb / 20.0f);
     }
 
     float process (float x)
@@ -132,7 +130,7 @@ public:
         float y = x;
         for (int i = 0; i < kNumBands; ++i)
             if (active[(size_t) i]) y = bell[(size_t) i].process (y);
-        return y * outGain;
+        return y;
     }
 
     float currentNote() const { return curNote; }              // MIDI note (fractional), <0 = none
@@ -171,7 +169,7 @@ private:
     float level = 0.0f;
     bool dipping = false;
     double sr = 0.0;
-    float curNote = -1.0f, targetNote = -1.0f, outGain = 1.0f;
+    float curNote = -1.0f, targetNote = -1.0f;
     int holdSamples = 0, sinceVoiced = 1 << 30;
     unsigned counter = 0;
 };

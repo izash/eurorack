@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "NoteEQ.h"
+#include "Compressor.h"
 #include <array>
 #include <atomic>
 
@@ -33,12 +34,15 @@ public:
     // read by the editor (message thread)
     std::atomic<float> shownNote { -1.0f };   // MIDI note, <0 = none
     std::atomic<float> shownHz   { 0.0f };
+    std::atomic<float> shownGainReduction { 0.0f };   // dB, for the meter
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     noteeq::Params readParams() const;
+    noteeq::Compressor::Params readCompParams() const;
 
     std::array<noteeq::NoteEQ, 2> engines;   // one per channel (each tracks its own pitch)
+    noteeq::Compressor comp;
     double sampleRate = 48000.0;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NoteEQProcessor)
 };

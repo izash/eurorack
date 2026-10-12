@@ -53,17 +53,26 @@ NoteEQEditor::NoteEQEditor (NoteEQProcessor& p) : AudioProcessorEditor (&p), pro
     {
         s->textFromValueFunction = [] (double v) { return noteName ((float) v); };
     }
+    addG (compThr, compThrL, "Threshold", "comp_thr", " dB");
+    addG (compRatio, compRatioL, "Ratio", "comp_ratio", ":1");
+    addG (compAtt, compAttL, "Attack", "comp_att", " ms");
+    addG (compRel, compRelL, "Release", "comp_rel", " ms");
+    addAndMakeVisible (compOn);
+    addAndMakeVisible (compAuto);
+    compOnA = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.apvts, "comp_on", compOn);
+    compAutoA = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.apvts, "comp_auto", compAuto);
     addAndMakeVisible (snap);
     snapA = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.apvts, "snap", snap);
 
-    setSize (760, 560);
+    setSize (760, 694);
     startTimerHz (30);
 }
 
 void NoteEQEditor::timerCallback()
 {
-    const float n = proc.shownNote.load(), f = proc.shownHz.load();
+    const float n = proc.shownNote.load(), f = proc.shownHz.load(), gr = proc.shownGainReduction.load();
     if (n != note || f != hz) { note = n; hz = f; repaint(); }
+    if (std::abs (gr - grDb) > 0.05f) { grDb = gr; repaint (meterArea.toNearestInt()); }
 }
 
 void NoteEQEditor::resized()
@@ -85,6 +94,22 @@ void NoteEQEditor::resized()
             auto row = a.removeFromTop (66);
             pr.second->setBounds (row.removeFromLeft (52));
             pr.first->setBounds (row);
+        }
+    }
+    r.removeFromTop (6);
+    auto cr = r.removeFromTop (112);                        // compressor row
+    {
+        auto left = cr.removeFromLeft (110);
+        compOn.setBounds (left.removeFromTop (24).translated (0, 6));
+        compAuto.setBounds (left.removeFromTop (24).translated (0, 6));
+        meterArea = cr.removeFromRight (120).withTrimmedTop (30).withHeight (18).toFloat();
+        const int kw = cr.getWidth() / 4;
+        for (auto pr : { std::pair<juce::Slider*, juce::Label*> { &compThr, &compThrL }, { &compRatio, &compRatioL },
+                         { &compAtt, &compAttL }, { &compRel, &compRelL } })
+        {
+            auto a = cr.removeFromLeft (kw);
+            pr.second->setBounds (a.removeFromTop (16));
+            pr.first->setBounds (a);
         }
     }
     r.removeFromTop (6);
@@ -163,4 +188,16 @@ void NoteEQEditor::paint (juce::Graphics& g)
     const juce::String readout = hz > 0.0f ? noteName (note) + "   " + juce::String (hz, 1) + " Hz" : "--";
     g.drawText (readout, getWidth() - 214, 10, 200, 24, juce::Justification::right);
     drawResponse (g, graphArea);
+
+    // gain-reduction meter (fills from the right as reduction grows, 0..18 dB)
+    g.setColour (juce::Colours::white.withAlpha (0.7f));
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawText ("Gain reduction", meterArea.translated (0, -16).toNearestInt(), juce::Justification::centredLeft);
+    g.setColour (juce::Colour (0xff1b1d22));
+    g.fillRoundedRectangle (meterArea, 3.0f);
+    const float fill = juce::jlimit (0.0f, 1.0f, grDb / 18.0f);
+    g.setColour (juce::Colour (0xffe0a030));
+    g.fillRoundedRectangle (meterArea.withTrimmedLeft (meterArea.getWidth() * (1.0f - fill)), 3.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.8f));
+    g.drawText (juce::String (grDb, 1) + " dB", meterArea.toNearestInt(), juce::Justification::centred);
 }

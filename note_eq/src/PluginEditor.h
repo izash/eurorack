@@ -26,6 +26,12 @@ private:
     std::array<Column, noteeq::kNumBands> cols;
 
     juce::ToggleButton snap { "Snap to note" };
+    juce::ToggleButton compOn { "Compressor" }, compAuto { "Auto gain" };
+    juce::Slider compThr, compRatio, compAtt, compRel;
+    juce::Label compThrL, compRatioL, compAttL, compRelL;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compOnA, compAutoA;
+    juce::Rectangle<float> meterArea;
+    float grDb = 0.0f;
     juce::Slider glide, hold, sens, refA, lowNote, highNote, outGain;
     juce::Label glideL, holdL, sensL, refAL, lowL, highL, outL;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtt;
